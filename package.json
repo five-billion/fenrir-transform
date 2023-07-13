@@ -1,0 +1,86 @@
+{
+  "name": "fenrir-transform",
+  "version": "0.0.0",
+  "description": "No-sql data transformations and migrations",
+  "author": "Bob Breznak",
+  "bin": {
+    "fenrir": "./bin/run"
+  },
+  "homepage": "https://github.com/bobbrez/fenrir-transform",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "repository": "bobbrez/fenrir-transform",
+  "files": [
+    "/bin",
+    "/dist",
+    "/npm-shrinkwrap.json",
+    "/oclif.manifest.json"
+  ],
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.363.0",
+    "@aws-sdk/lib-dynamodb": "^3.365.0",
+    "@aws/dynamodb-expressions": "^0.7.3",
+    "@oclif/core": "^2",
+    "@oclif/plugin-help": "^5",
+    "@oclif/plugin-plugins": "^2.4.7",
+    "cli-color": "^2.0.3",
+    "eslint-import-resolver-node": "^0.3.7",
+    "fs-extra": "^11.1.1",
+    "zod": "^3.21.4"
+  },
+  "devDependencies": {
+    "@oclif/test": "^2.3.25",
+    "@types/chai": "^4",
+    "@types/cli-color": "^2.0.2",
+    "@types/fs-extra": "^11.0.1",
+    "@types/mocha": "^9.0.0",
+    "@types/node": "^20.4.0",
+    "@typescript-eslint/parser": "^5.61.0",
+    "chai": "^4",
+    "eslint": "^7.32.0",
+    "eslint-config-oclif": "^4",
+    "eslint-config-oclif-typescript": "^1.0.3",
+    "eslint-config-prettier": "^8.8.0",
+    "eslint-import-resolver-typescript": "^3.5.5",
+    "eslint-plugin-import": "^2.27.5",
+    "mocha": "^9",
+    "oclif": "^3",
+    "prettier": "^3.0.0",
+    "shx": "^0.3.3",
+    "ts-node": "^10.9.1",
+    "tslib": "^2.6.0",
+    "typescript": "^4.9.5"
+  },
+  "oclif": {
+    "bin": "fenrir",
+    "dirname": "fenrir",
+    "commands": "./dist/commands",
+    "plugins": [
+      "@oclif/plugin-help",
+      "@oclif/plugin-plugins"
+    ],
+    "topicSeparator": " ",
+    "topics": {
+      "hello": {
+        "description": "Say hello to the world and others"
+      }
+    }
+  },
+  "scripts": {
+    "build": "shx rm -rf dist && tsc -b",
+    "lint": "eslint . --ext .ts --config .eslintrc",
+    "postpack": "shx rm -f oclif.manifest.json",
+    "posttest": "yarn lint",
+    "prepack": "yarn build && oclif manifest && oclif readme",
+    "test": "mocha --forbid-only \"test/**/*.test.ts\"",
+    "version": "oclif readme && git add README.md"
+  },
+  "engines": {
+    "node": ">=12.0.0"
+  },
+  "bugs": "https://github.com/bobbrez/fenrir-transform/issues",
+  "keywords": [
+    "oclif"
+  ],
+  "types": "dist/index.d.ts"
+}
