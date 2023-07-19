@@ -6,6 +6,7 @@ import * as path from 'node:path'
 import { BaseCommand } from '../../base-command'
 import { buildUpdateProps } from '../../libs/dynamodb'
 import { TransformationRecord, TransformationRecordSchema } from '../../types'
+import { BatchWriteCommandInput } from '@aws-sdk/lib-dynamodb'
 
 type TransformationRecordKeyBatch = { transformationId: string }[]
 type TransformationState = { transformation: Dirent; record?: TransformationRecord }
@@ -72,6 +73,7 @@ export default class Transform extends BaseCommand<typeof Transform> {
     const stats = {
       total: 0,
       updated: 0,
+      skipped: 0,
     }
 
     let ExclusiveStartKey: Record<string, AttributeValue> | undefined
@@ -90,6 +92,12 @@ export default class Transform extends BaseCommand<typeof Transform> {
         stats.total += result.Items.length
 
         for (const item of result.Items) {
+          const skipped = (await transformation?.skip(item)) || false
+          if (skipped) {
+            stats.skipped++
+            continue
+          }
+
           const transformed = await transformation.forward(item)
 
           if (transformed) {
@@ -98,28 +106,37 @@ export default class Transform extends BaseCommand<typeof Transform> {
               {}
             )
 
-            const transformedKeys = Transform.KeyNames.reduce(
-              (acc: Record<string, AttributeValue>, key: string) => ({ ...acc, [key]: transformed[key] }),
-              {}
-            )
-
             const keysUpdated = Object.keys(sourceKeys).reduce((acc, key) => item[key] !== transformed[key], false)
 
-            const action = {
-              update: {
-                Keys: transformedKeys,
-                Item: transformed,
+            const actions: Record<string, any>[] = [
+              {
+                PutRequest: {
+                  Item: transformed,
+                },
               },
-              remove: undefined as any,
-            }
+            ]
 
             if (keysUpdated) {
-              action.remove = {
-                Keys: sourceKeys,
-              }
+              actions.push({
+                DeleteRequest: {
+                  Key: sourceKeys,
+                },
+              })
             }
 
-            this.log('action:', action)
+            console.log({
+              RequestItems: {
+                [Transform.TableName]: actions,
+              },
+            })
+
+            await this.ddb.batchWrite({
+              RequestItems: {
+                [Transform.TableName]: actions,
+              },
+            })
+
+            this.log('action:', actions)
 
             stats.updated++
           }
