@@ -1,12 +1,12 @@
 import { AttributeValue } from '@aws-sdk/client-dynamodb'
 import { ux } from '@oclif/core'
-import * as clc from 'cli-color'
+import clc from 'cli-color'
 import { Dirent, readdirSync } from 'node:fs'
 import * as path from 'node:path'
-import { BaseCommand } from '../../base-command'
-import { buildUpdateProps } from '../../libs/dynamodb'
-import { TransformationRecord, TransformationRecordSchema } from '../../types'
-import { BatchWriteCommandInput } from '@aws-sdk/lib-dynamodb'
+import PQueue from 'p-queue'
+import { BaseCommand } from '../../base-command.js'
+import { buildUpdateProps } from '../../libs/dynamodb.js'
+import { TransformationRecord, TransformationRecordSchema } from '../../types.js'
 
 type TransformationRecordKeyBatch = { transformationId: string }[]
 type TransformationState = { transformation: Dirent; record?: TransformationRecord }
@@ -65,7 +65,7 @@ export default class Transform extends BaseCommand<typeof Transform> {
 
     await this.setLockedRecord(transformationDir.name)
 
-    const path = [this.transformationsDirectory, transformationDir.name].join('/')
+    const path = [this.transformationsDirectory, transformationDir.name, 'index.ts'].join('/')
 
     const { Transform } = await import(path)
     const transformation = new Transform({ ddb: this.ddb })
@@ -74,7 +74,10 @@ export default class Transform extends BaseCommand<typeof Transform> {
       total: 0,
       updated: 0,
       skipped: 0,
+      page: 0
     }
+
+    const queue = new PQueue({ concurrency: 5 })
 
     let ExclusiveStartKey: Record<string, AttributeValue> | undefined
 
@@ -86,7 +89,7 @@ export default class Transform extends BaseCommand<typeof Transform> {
 
       ExclusiveStartKey = result.LastEvaluatedKey
 
-      this.log(`scan returned ${result?.Items?.length || 0} records`)
+      this.log(`scan returned ${result?.Items?.length || 0} records on page ${stats.page}`)
 
       if (result.Items) {
         stats.total += result.Items.length
@@ -98,57 +101,66 @@ export default class Transform extends BaseCommand<typeof Transform> {
             continue
           }
 
-          const transformed = await transformation.forward(item)
+          await queue.add(async () => {
+            const transformed = await transformation.forward(item)
 
-          if (transformed) {
-            const sourceKeys = Transform.KeyNames.reduce(
-              (acc: Record<string, AttributeValue>, key: string) => ({ ...acc, [key]: item[key] }),
-              {}
-            )
+            if (transformed) {
+              const sourceKeys = Transform.KeyNames.reduce(
+                (acc: Record<string, AttributeValue>, key: string) => ({ ...acc, [key]: item[key] }),
+                {}
+              )
 
-            const keysUpdated = Object.keys(sourceKeys).reduce((acc, key) => item[key] !== transformed[key], false)
+              const keysUpdated = Object.keys(sourceKeys).reduce((acc, key) => item[key] !== transformed[key], false)
 
-            const actions: Record<string, any>[] = [
-              {
-                PutRequest: {
-                  Item: transformed,
+              const actions: Record<string, any>[] = [
+                {
+                  PutRequest: {
+                    Item: transformed,
+                  },
                 },
-              },
-            ]
+              ]
 
-            if (keysUpdated) {
-              actions.push({
-                DeleteRequest: {
-                  Key: sourceKeys,
+              if (keysUpdated) {
+                actions.push({
+                  DeleteRequest: {
+                    Key: sourceKeys,
+                  },
+                })
+              }
+
+              console.log({
+                RequestItems: {
+                  [Transform.TableName]: actions,
                 },
               })
+
+              await this.ddb.batchWrite({
+                RequestItems: {
+                  [Transform.TableName]: actions,
+                },
+              })
+
+              this.log('action:', actions)
+
+              stats.updated++
             }
 
-            console.log({
-              RequestItems: {
-                [Transform.TableName]: actions,
-              },
-            })
-
-            await this.ddb.batchWrite({
-              RequestItems: {
-                [Transform.TableName]: actions,
-              },
-            })
-
-            this.log('action:', actions)
-
-            stats.updated++
-          }
-
-          stats.total++
+            stats.total++
+          })
         }
       }
-    } while (ExclusiveStartKey)
+      stats.page++
+    } while (ExclusiveStartKey && await new Promise(async resolve => {
+      await queue.onSizeLessThan(500)
+      resolve(true)
+    }))
+
+    console.log(`dynamodb scan finished, waiting for queue to drain`)
+    await queue.onIdle()
 
     await this.setCompletedRecord(transformationDir.name)
 
-    this.log(`indexed ${JSON.stringify(stats, null, 2)}`)
+    this.log(`transformation complete ${JSON.stringify(stats, null, 2)}`)
   }
 
   async transformationState() {

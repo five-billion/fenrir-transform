@@ -1,10 +1,9 @@
+import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb'
 import { Command, Flags, Interfaces } from '@oclif/core'
-import * as fs from 'fs-extra'
+import * as fs from 'fs'
 import * as path from 'node:path'
-import { LogLevel, LogLevelSchema, ProjectConfig, ProjectConfigSchema } from './types'
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
-import { DynamoDBDocument, DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb'
-import { SimplifiedDDBDocument } from './libs/dynamodb'
+import { SimplifiedDDBDocument } from './libs/dynamodb.js'
+import { LogLevel, LogLevelSchema, ProjectConfig, ProjectConfigSchema } from './types.js'
 
 export type Flags<T extends typeof Command> = Interfaces.InferredFlags<(typeof BaseCommand)['baseFlags'] & T['flags']>
 export type Args<T extends typeof Command> = Interfaces.InferredArgs<T['args']>
@@ -33,7 +32,9 @@ export abstract class BaseCommand<T extends typeof Command> extends Command {
       }
 
       this.log('Loading project config from:', configPath)
-      return fs.readJSON(configPath).then(config => ProjectConfigSchema.parse(config))
+      const json = fs.readFileSync(configPath, { encoding: 'utf-8' })
+      const config = JSON.parse(json)
+      return ProjectConfigSchema.parse(config)
     }
 
     throw new Error('Could not find project config.')

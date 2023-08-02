@@ -1,14 +1,10 @@
 import {
-  AttributeValue,
-  DynamoDBClient,
-  ScanCommandOutput,
-  ServiceInputTypes,
-  ServiceOutputTypes,
+  DynamoDBClient
 } from '@aws-sdk/client-dynamodb'
 import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb'
+import { SerializeMiddleware } from '@aws-sdk/types'
 import * as DDBUtl from '@aws-sdk/util-dynamodb'
 import { ExpressionAttributes, UpdateExpression } from '@aws/dynamodb-expressions'
-import { SerializeMiddleware } from '@aws-sdk/types'
 
 export type DynamoDBRecord = Record<string, DDBUtl.NativeAttributeValue>
 

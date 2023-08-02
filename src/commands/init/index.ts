@@ -1,5 +1,5 @@
 import { CreateTableCommand, DynamoDBClient } from '@aws-sdk/client-dynamodb'
-import { BaseCommand } from '../../base-command'
+import { BaseCommand } from '../../base-command.js'
 
 const client = new DynamoDBClient({})
 

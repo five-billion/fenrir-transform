@@ -4,12 +4,13 @@
   "description": "No-sql data transformations and migrations",
   "author": "Bob Breznak",
   "bin": {
-    "fenrir": "./bin/run"
+    "fenrir": "./bin/run.js",
+    "dev": "./bin/dev.js"
   },
-  "homepage": "https://github.com/bobbrez/fenrir-transform",
+  "homepage": "https://github.com/five-billion/fenrir-transform",
   "license": "MIT",
   "main": "dist/index.js",
-  "repository": "bobbrez/fenrir-transform",
+  "repository": "five-billion/fenrir-transform",
   "files": [
     "/bin",
     "/dist",
@@ -25,7 +26,7 @@
     "@oclif/plugin-plugins": "^2.4.7",
     "cli-color": "^2.0.3",
     "eslint-import-resolver-node": "^0.3.7",
-    "fs-extra": "^11.1.1",
+    "p-queue": "^7.3.4",
     "zod": "^3.21.4"
   },
   "devDependencies": {
@@ -78,9 +79,10 @@
   "engines": {
     "node": ">=12.0.0"
   },
-  "bugs": "https://github.com/bobbrez/fenrir-transform/issues",
+  "bugs": "https://github.com/five-billion/fenrir-transform/issues",
   "keywords": [
     "oclif"
   ],
-  "types": "dist/index.d.ts"
+  "types": "dist/index.d.ts",
+  "type": "module"
 }
