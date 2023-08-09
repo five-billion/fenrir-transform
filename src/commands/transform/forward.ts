@@ -80,8 +80,9 @@ export default class Transform extends BaseCommand<typeof Transform> {
       noChange: 0,
     }
 
+    const BATCH_WRITE_CONCURRENCY = 4
     const processScanPageQueue = new PQueue({ concurrency: 4 })
-    const batchWriteQueue = new PQueue({ concurrency: 4 })
+    const batchWriteQueue = new PQueue({ concurrency: BATCH_WRITE_CONCURRENCY })
 
     const scanParams = transformation.scanParams ? transformation.scanParams() : {}
     let ExclusiveStartKey: Record<string, AttributeValue> | undefined
@@ -125,17 +126,28 @@ export default class Transform extends BaseCommand<typeof Transform> {
         const transformSingle = async (item: Record<string, any>): Promise<null | { put: any, delete: boolean, sourceKeys: Record<string, any>, diff: any }> => {
           const transformed = await transformation.forward(item)
 
-          if (!transformed) return null
+          const sourceKeys = Transform.KeyNames.reduce(
+            (acc: Record<string, AttributeValue>, key: string) => ({ ...acc, [key]: item[key] }),
+            {}
+          )
+
+          if (transformed === null) {
+            // if `forward` returns explicitly `null`, we delete the record
+            return {
+              put: null,
+              delete: true,
+              sourceKeys,
+              diff: null,
+            }
+          } else if (!transformed) {
+            // if `forward` returns `undefined`/falsy, we skip the record
+            return null
+          }
 
           if (_.isEqual(item, transformed)) {
             noChangeThisPage++ // FIXME: the var scoping for this is whack
             return null
           }
-
-          const sourceKeys = Transform.KeyNames.reduce(
-            (acc: Record<string, AttributeValue>, key: string) => ({ ...acc, [key]: item[key] }),
-            {}
-          )
 
           let diff = null
           try {
@@ -168,15 +180,17 @@ export default class Transform extends BaseCommand<typeof Transform> {
 
         const actions: Record<string, any>[] = []
         results.forEach(result => {
-          if (!result?.put) return
+          if (result === null) return
 
-          actions.push({
-            PutRequest: {
-              Item: result.put,
-            },
-          })
+          if (result?.put) {
+            actions.push({
+              PutRequest: {
+                Item: result.put,
+              },
+            })
+          }
 
-          if (result?.delete && result.sourceKeys) {
+          if (result?.delete === true && result.sourceKeys) {
             actions.push({
               DeleteRequest: {
                 Key: result.sourceKeys,
@@ -184,35 +198,57 @@ export default class Transform extends BaseCommand<typeof Transform> {
             })
             deletedThisPage++
           }
-          this.log(`update diff for ${Object.entries(result.sourceKeys).map(([k, v]) => `${k}:${v}`).join(' ')} ${result.delete ? '(keys changed, deleted original)' : ''}: ${JSON.stringify(result.diff)}`)
+
+          this.log(`update diff for ${Object.entries(result.sourceKeys).map(([k, v]) => `${k}:${v}`).join(' ')} ${result.delete ? '(deleted)' : ''}: ${JSON.stringify(result.diff)}`)
 
           updatedThisPage++
         })
 
+        const processBatch = async (batchOfActions: Record<string, any>[], attempt: number = 1) => {
+          this.log(`sending batchWrite request with ${batchOfActions.length} items (attempt ${attempt})`)
+          try {
+            const response = await this.ddb.batchWrite({
+              RequestItems: {
+                [Transform.TableName]: batchOfActions
+              },
+            })
+            if (response.UnprocessedItems && response.UnprocessedItems[Transform.TableName]) {
+              const retryBatch = response.UnprocessedItems[Transform.TableName]
+              this.log(`re-enqueuing ${retryBatch.length} unprocessed items`)
+              await batchWriteQueue.add(() => processBatch(retryBatch, attempt++))
+            } else {
+              const currentConcurrency = batchWriteQueue.concurrency
+              if (currentConcurrency < BATCH_WRITE_CONCURRENCY) {
+                const newConcurrency = currentConcurrency + 1
+                batchWriteQueue.concurrency = newConcurrency
+                this.log(`Increased batchWrite concurrency to ${newConcurrency}`)
+              }
+            }
+          } catch (err: any) {
+            if (err.name === 'ThrottlingException') {
+              console.error(`Received ThrottlingException, pausing queue for 1 minute`)
+              if (!batchWriteQueue.isPaused) {
+                batchWriteQueue.pause()
+                await batchWriteQueue.add(() => processBatch(batchOfActions, attempt++))
+                setTimeout(() => {
+                  if (batchWriteQueue.isPaused) {
+                    console.log(`Resuming queue, with c=1, after 1 minute delay due to a ThrottlingException`)
+                    batchWriteQueue.concurrency = 1
+                    batchWriteQueue.start()
+                  }
+                }, 60 * 1000)
+              }
+            } else {
+              console.error(`batchWrite error`)
+              console.error(err)
+              throw err
+            }
+          }
+        }
+
         while (actions.length > 0) {
           const batch = actions.splice(0, 25)
-
-          batchWriteQueue.add(async () => {
-            let requestItems = { [Transform.TableName]: batch }
-            let attempts = 1
-            this.log(`sending batchWrite request with ${batch.length} items (attempt ${attempts++})`)
-            do {
-              const response = await this.ddb.batchWrite({
-                RequestItems: requestItems,
-              })
-
-              if (response.UnprocessedItems && response.UnprocessedItems[Transform.TableName]) {
-                requestItems = response.UnprocessedItems
-                let count = 0
-                Object.values(requestItems[Transform.TableName]).forEach((items) => {
-                  count += items.length
-                })
-                this.log(`re-sending ${count} unprocessed items`)
-              } else {
-                requestItems = {}
-              }
-            } while (requestItems[Transform.TableName] && Object.values(requestItems[Transform.TableName]).length > 0)
-          })
+          batchWriteQueue.add(() => processBatch(batch))
         }
         this.log(`skipped ${skippedThisPage}, no change ${noChangeThisPage}, updated ${updatedThisPage}, deleted ${deletedThisPage} records in batch`)
         stats.skipped += skippedThisPage
