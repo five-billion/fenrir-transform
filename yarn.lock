@@ -3305,7 +3305,7 @@ event-emitter@^0.3.5:
     d "1"
     es5-ext "~0.10.14"
 
-eventemitter3@^4.0.4:
+eventemitter3@^4.0.4, eventemitter3@^4.0.7:
   version "4.0.7"
   resolved "https://registry.npmjs.org/eventemitter3/-/eventemitter3-4.0.7.tgz"
   integrity sha512-8guHBZCwKnFhYdHr2ysuRWErTwhoN2X8XELRlrRwpmfeY2jjuUN4taQMsULKUVo1K4DvZl+0pgfyoysHxvmvEw==
@@ -5326,6 +5326,14 @@ p-map@^4.0.0:
   dependencies:
     aggregate-error "^3.0.0"
 
+p-queue-cjs@^7.3.4:
+  version "7.3.4"
+  resolved "https://registry.yarnpkg.com/p-queue-cjs/-/p-queue-cjs-7.3.4.tgz#22b64de6dff9e0eff63cd8a1e4cd2aa6fe2e7009"
+  integrity sha512-vP0BvEAgmUEShxWBCETvxiUDnwSiCLfBRqmhdKlNvcXF/7x2yemtYLcxT1pfYELZLlyGL3grvGnq+KF5OwNZfA==
+  dependencies:
+    eventemitter3 "^4.0.7"
+    p-timeout-cjs "^5.0.5"
+
 p-queue@^6.6.2:
   version "6.6.2"
   resolved "https://registry.npmjs.org/p-queue/-/p-queue-6.6.2.tgz"
@@ -5333,6 +5341,11 @@ p-queue@^6.6.2:
   dependencies:
     eventemitter3 "^4.0.4"
     p-timeout "^3.2.0"
+
+p-timeout-cjs@^5.0.5:
+  version "5.0.5"
+  resolved "https://registry.yarnpkg.com/p-timeout-cjs/-/p-timeout-cjs-5.0.5.tgz#20402f1d13112be39ea1a8bccfc57b416c62b44a"
+  integrity sha512-tjXKZjvzLUGerHxY0+hf0XROyF2XtuZpLNtUlkOOW+nVjDIoH0pKi3hh4X4+MXLqYavcIITLjNC0GZHUCRrwpA==
 
 p-timeout@^3.2.0:
   version "3.2.0"
