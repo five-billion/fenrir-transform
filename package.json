@@ -29,7 +29,7 @@
     "zod": "^3.21.4"
   },
   "devDependencies": {
-    "@oclif/test": "^2.3.25",
+    "@oclif/test": "^2.5.4",
     "@types/chai": "^4",
     "@types/cli-color": "^2.0.2",
     "@types/fs-extra": "^11.0.1",
